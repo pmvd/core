@@ -109,10 +109,10 @@ inline void LogicalFontInstance::ReleaseHbFont()
 
 inline void LogicalFontInstance::DecodeHbTag(const hb_tag_t nTableTag, char* pTagName)
 {
-    pTagName[0] = (char)(nTableTag >> 24);
-    pTagName[1] = (char)(nTableTag >> 16);
-    pTagName[2] = (char)(nTableTag >> 8);
-    pTagName[3] = (char)nTableTag;
+    pTagName[0] = static_cast<char>(nTableTag >> 24);
+    pTagName[1] = static_cast<char>(nTableTag >> 16);
+    pTagName[2] = static_cast<char>(nTableTag >> 8);
+    pTagName[3] = static_cast<char>(nTableTag);
     pTagName[4] = 0;
 }
 
