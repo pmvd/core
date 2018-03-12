@@ -271,8 +271,6 @@ bool CommonSalLayout::HasVerticalAlternate(sal_UCS4 aChar, sal_UCS4 aVariationSe
 
 bool CommonSalLayout::LayoutText(ImplLayoutArgs& rArgs)
 {
-    hb_face_t* pHbFace = hb_font_get_face(mpFont->GetHbFont());
-
     int nGlyphCapacity = 2 * (rArgs.mnEndCharPos - rArgs.mnMinCharPos);
     Reserve(nGlyphCapacity);
 
@@ -312,6 +310,8 @@ bool CommonSalLayout::LayoutText(ImplLayoutArgs& rArgs)
     mpFont->GetScale(&nXScale, &nYScale);
 
     Point aCurrPos(0, 0);
+    hb_font_t *pHbFont = mpFont->GetHbFont();
+    hb_face_t *pHbFace = hb_font_get_face(pHbFont);
     while (true)
     {
         int nBidiMinRunPos, nBidiEndRunPos;
@@ -400,7 +400,6 @@ bool CommonSalLayout::LayoutText(ImplLayoutArgs& rArgs)
         if (bRightToLeft)
             std::reverse(aSubRuns.begin(), aSubRuns.end());
 
-        hb_font_t *pHbFont = mpFont->GetHbFont();
         for (const auto& aSubRun : aSubRuns)
         {
             hb_buffer_clear_contents(pHbBuffer);
