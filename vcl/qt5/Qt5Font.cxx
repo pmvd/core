@@ -18,13 +18,40 @@
  */
 
 #include "Qt5Font.hxx"
+#include "Qt5Tools.hxx"
 
 #include <QtGui/QFont>
 #include <QtGui/QRawFont>
 
+static QFont::Weight GetQFontWeight(FontWeight eWeight)
+{
+    switch(eWeight)
+    {
+    case WEIGHT_THIN: return QFont::Thin;
+    case WEIGHT_ULTRALIGHT: return QFont::ExtraLight;
+    case WEIGHT_LIGHT: return QFont::Light;
+    case FontWeight_FORCE_EQUAL_SIZE:
+        assert( 0 && "FontWeight_FORCE_EQUAL_SIZE not implementable for QFont" );
+    case WEIGHT_SEMILIGHT:
+    case WEIGHT_DONTKNOW:
+    case WEIGHT_NORMAL: return QFont::Normal;
+    case WEIGHT_MEDIUM: return QFont::Medium;
+    case WEIGHT_SEMIBOLD: return QFont::DemiBold;
+    case WEIGHT_BOLD: return QFont::Bold;
+    case WEIGHT_ULTRABOLD: return QFont::ExtraBold;
+    case WEIGHT_BLACK: return QFont::Black;
+    }
+
+    // so we would get enum not handled warning
+    return QFont::Normal;
+}
+
 Qt5Font::Qt5Font(const PhysicalFontFace& rPFF, const FontSelectPattern& rFSP)
     : LogicalFontInstance(rPFF, rFSP)
 {
+    setFamily( toQString(rPFF.GetFamilyName()) );
+    setWeight( GetQFontWeight(rPFF.GetWeight()) );
+    setPixelSize( rFSP.mnHeight );
 }
 
 Qt5Font::~Qt5Font() {}

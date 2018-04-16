@@ -167,7 +167,7 @@ bool OutputDevice::AddTempDevFont( const OUString& rFileURL, const OUString& rFo
 FontMetric OutputDevice::GetFontMetric() const
 {
     FontMetric aMetric;
-    if( mbNewFont && !ImplNewFont() )
+    if( !ImplNewFont() )
         return aMetric;
 
     LogicalFontInstance* pFontInstance = mpFontInstance;
@@ -230,10 +230,8 @@ bool OutputDevice::GetFontCharMap( FontCharMapRef& rxFontCharMap ) const
     if( !mpGraphics && !AcquireGraphics() )
         return false;
 
-    if( mbNewFont )
-        ImplNewFont();
-    if( mbInitFont )
-        InitFont();
+    ImplNewFont();
+    InitFont();
     if( !mpFontInstance )
         return false;
 
@@ -255,10 +253,8 @@ bool OutputDevice::GetFontCapabilities( vcl::FontCapabilities& rFontCapabilities
     if( !mpGraphics && !AcquireGraphics() )
         return false;
 
-    if( mbNewFont )
-        ImplNewFont();
-    if( mbInitFont )
-        InitFont();
+    ImplNewFont();
+    InitFont();
     if( !mpFontInstance )
         return false;
 
@@ -975,28 +971,25 @@ void OutputDevice::ImplInitFontList() const
 
 void OutputDevice::InitFont() const
 {
-    DBG_TESTSOLARMUTEX();
-
-    if (!mpFontInstance)
+    if (!mpFontInstance || !mbInitFont)
         return;
 
-    if ( mbInitFont )
-    {
-        // decide if antialiasing is appropriate
-        bool bNonAntialiased(GetAntialiasing() & AntialiasingFlags::DisableText);
-        FontSelectPattern aPattern(mpFontInstance->GetFontSelectPattern());
-        if (!utl::ConfigManager::IsFuzzing())
-        {
-            const StyleSettings& rStyleSettings = GetSettings().GetStyleSettings();
-            bNonAntialiased |= bool(rStyleSettings.GetDisplayOptions() & DisplayOptions::AADisable);
-            bNonAntialiased |= (int(rStyleSettings.GetAntialiasingMinPixelHeight()) > aPattern.mnHeight);
-        }
-        aPattern.mbNonAntialiased = bNonAntialiased;
+    DBG_TESTSOLARMUTEX();
 
-        // select font in the device layers
-        mpGraphics->SetFont(&aPattern, 0);
-        mbInitFont = false;
+    // decide if antialiasing is appropriate
+    bool bNonAntialiased(GetAntialiasing() & AntialiasingFlags::DisableText);
+    FontSelectPattern aPattern(mpFontInstance->GetFontSelectPattern());
+    if (!utl::ConfigManager::IsFuzzing())
+    {
+        const StyleSettings& rStyleSettings = GetSettings().GetStyleSettings();
+        bNonAntialiased |= bool(rStyleSettings.GetDisplayOptions() & DisplayOptions::AADisable);
+        bNonAntialiased |= (int(rStyleSettings.GetAntialiasingMinPixelHeight()) > aPattern.mnHeight);
     }
+    aPattern.mbNonAntialiased = bNonAntialiased;
+
+    // select font in the device layers
+    mpGraphics->SetFont(&aPattern, 0);
+    mbInitFont = false;
 }
 
 bool OutputDevice::ImplNewFont() const
@@ -1035,29 +1028,28 @@ bool OutputDevice::ImplNewFont() const
             aSize.setHeight( 1 );
         else
             aSize.setHeight( (12*mnDPIY)/72 );
-        fExactHeight =  static_cast<float>(aSize.Height());
+        fExactHeight = static_cast<float>(aSize.Height());
     }
 
     // select the default width only when logical width is zero
     if( (0 == aSize.Width()) && (0 != maFont.GetFontSize().Width()) )
         aSize.setWidth( 1 );
 
-    // get font entry
+    // get new font entry
+    LogicalFontInstance* pFontInstance = mpFontCache->GetFontInstance( mpFontCollection, maFont, aSize, fExactHeight );
     LogicalFontInstance* pOldFontInstance = mpFontInstance;
-    mpFontInstance = mpFontCache->GetFontInstance( mpFontCollection, maFont, aSize, fExactHeight );
+    mpFontInstance = pFontInstance;
     if( pOldFontInstance )
         pOldFontInstance->Release();
-
-    LogicalFontInstance* pFontInstance = mpFontInstance;
-
     if (!pFontInstance)
     {
         SAL_WARN("vcl.gdi", "OutputDevice::ImplNewFont(): no LogicalFontInstance, no Font");
         return false;
     }
 
-    // mark when lower layers need to get involved
     mbNewFont = false;
+
+    // mark when lower layers need to get involved
     if( pFontInstance != pOldFontInstance )
         mbInitFont = true;
 
@@ -1100,14 +1092,13 @@ bool OutputDevice::ImplNewFont() const
     }
 
     // calculate text offset depending on TextAlignment
-    TextAlign eAlign = maFont.GetAlignment();
-    if ( eAlign == ALIGN_BASELINE )
+    switch (maFont.GetAlignment())
     {
+    case ALIGN_BASELINE:
         mnTextOffX = 0;
         mnTextOffY = 0;
-    }
-    else if ( eAlign == ALIGN_TOP )
-    {
+        break;
+    case ALIGN_TOP:
         mnTextOffX = 0;
         mnTextOffY = +pFontInstance->mxFontMetric->GetAscent() + mnEmphasisAscent;
         if ( pFontInstance->mnOrientation )
@@ -1115,9 +1106,8 @@ bool OutputDevice::ImplNewFont() const
             Point aOriginPt(0, 0);
             aOriginPt.RotateAround( mnTextOffX, mnTextOffY, pFontInstance->mnOrientation );
         }
-    }
-    else // eAlign == ALIGN_BOTTOM
-    {
+        break;
+    case ALIGN_BOTTOM:
         mnTextOffX = 0;
         mnTextOffY = -pFontInstance->mxFontMetric->GetDescent() + mnEmphasisDescent;
         if ( pFontInstance->mnOrientation )
@@ -1125,6 +1115,10 @@ bool OutputDevice::ImplNewFont() const
             Point aOriginPt(0, 0);
             aOriginPt.RotateAround( mnTextOffX, mnTextOffY, pFontInstance->mnOrientation );
         }
+        break;
+    case TextAlign_FORCE_EQUAL_SIZE:
+        assert( 0 && "TextAlign_FORCE_EQUAL_SIZE not implemented for new fonts" );
+        break;
     }
 
     mbTextLines     = ((maFont.GetUnderline() != LINESTYLE_NONE) && (maFont.GetUnderline() != LINESTYLE_DONTKNOW)) ||
@@ -1410,7 +1404,7 @@ std::unique_ptr<SalLayout> OutputDevice::ImplGlyphFallbackLayout( std::unique_pt
 
 long OutputDevice::GetMinKashida() const
 {
-    if( mbNewFont && !ImplNewFont() )
+    if( !ImplNewFont() )
         return 0;
 
     return ImplDevicePixelToLogicWidth( mpFontInstance->mxFontMetric->GetMinKashida() );

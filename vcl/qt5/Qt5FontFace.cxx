@@ -44,9 +44,28 @@ Qt5FontFace::Qt5FontFace(const Qt5FontFace& rSrc)
 Qt5FontFace* Qt5FontFace::fromQFont(const QFont& rFont)
 {
     FontAttributes aFA;
-    aFA.SetFamilyName(toOUString(rFont.family()));
-    aFA.SetStyleName(toOUString(rFont.styleName()));
-    aFA.SetItalic(rFont.italic() ? ITALIC_NORMAL : ITALIC_NONE);
+    QFontInfo aFontInfo(rFont);
+    aFA.SetFamilyName(toOUString(aFontInfo.family()));
+    aFA.SetStyleName(toOUString(aFontInfo.styleName()));
+    aFA.SetItalic(aFontInfo.italic() ? ITALIC_NORMAL : ITALIC_NONE);
+    aFA.SetPitch(aFontInfo.fixedPitch() ? PITCH_FIXED : PITCH_VARIABLE);
+
+    FontWeight eWeight;
+    switch( aFontInfo.weight() )
+    {
+    case QFont::Thin: eWeight = WEIGHT_THIN; break;
+    case QFont::ExtraLight: eWeight =  WEIGHT_ULTRALIGHT; break;
+    case QFont::Light: eWeight = WEIGHT_LIGHT; break;
+    case QFont::Normal: eWeight = WEIGHT_NORMAL; break;
+    case QFont::Medium: eWeight = WEIGHT_MEDIUM; break;
+    case QFont::DemiBold: eWeight = WEIGHT_SEMIBOLD; break;
+    case QFont::Bold: eWeight = WEIGHT_BOLD; break;
+    case QFont::ExtraBold: eWeight = WEIGHT_ULTRABOLD; break;
+    case QFont::Black: eWeight = WEIGHT_BLACK; break;
+    }
+    aFA.SetWeight(eWeight);
+
+    SAL_INFO("vcl.qt5.font", toOUString(aFontInfo.family()) << " " << aFontInfo.weight() << " => " << (int) eWeight );
 
     return new Qt5FontFace(aFA, rFont.toString());
 }

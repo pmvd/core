@@ -207,7 +207,7 @@ void Qt5Graphics::drawRect(long nX, long nY, long nWidth, long nHeight)
     Qt5Painter aPainter(*this, true);
     if (SALCOLOR_NONE != m_aFillColor)
         aPainter.fillRect(nX, nY, nWidth, nHeight, aPainter.brush());
-    else
+    if (SALCOLOR_NONE != m_aLineColor)
         aPainter.drawRect(nX, nY, nWidth, nHeight);
     aPainter.update(nX, nY, nWidth, nHeight);
 }
@@ -248,9 +248,31 @@ void Qt5Graphics::drawPolygon(sal_uInt32 nPoints, const SalPoint* pPtAry)
     aPainter.update(aPolygon.boundingRect());
 }
 
-void Qt5Graphics::drawPolyPolygon(sal_uInt32 /*nPoly*/, const sal_uInt32* /*pPoints*/,
-                                  PCONSTSALPOINT* /*pPtAry*/)
+void Qt5Graphics::drawPolyPolygon(sal_uInt32 nPolyCount, const sal_uInt32* pPoints,
+                                  PCONSTSALPOINT* ppPtAry)
 {
+    // ignore invisible polygons
+    if (SALCOLOR_NONE == m_aFillColor && SALCOLOR_NONE == m_aLineColor)
+        return;
+
+    QPainterPath aPath;
+    for( sal_uInt32 nPoly = 0; nPoly < nPolyCount; nPoly++ )
+    {
+        const sal_uInt32 nPoints = pPoints[nPoly];
+        if( nPoints > 1 )
+        {
+            const SalPoint *pPtAry = ppPtAry[nPoly];
+            aPath.moveTo(pPtAry->mnX, pPtAry->mnY);
+            pPtAry++;
+            for( sal_uInt32 nPoint = 1; nPoint < nPoints; nPoint++, pPtAry++ )
+                aPath.lineTo(pPtAry->mnX, pPtAry->mnY);
+            aPath.closeSubpath();
+        }
+    }
+
+    Qt5Painter aPainter(*this, true);
+    aPainter.drawPath(aPath);
+    aPainter.update(aPath.boundingRect());
 }
 
 bool Qt5Graphics::drawPolyPolygon(const basegfx::B2DPolyPolygon& rPolyPoly, double fTransparency)
@@ -368,6 +390,7 @@ void Qt5Graphics::copyArea(long nDestX, long nDestY, long nSrcX, long nSrcY, lon
 
 void Qt5Graphics::copyBits(const SalTwoRect& rPosAry, SalGraphics* pSrcGraphics)
 {
+
     if (rPosAry.mnSrcWidth <= 0 || rPosAry.mnSrcHeight <= 0 || rPosAry.mnDestWidth <= 0
         || rPosAry.mnDestHeight <= 0)
         return;
@@ -375,21 +398,30 @@ void Qt5Graphics::copyBits(const SalTwoRect& rPosAry, SalGraphics* pSrcGraphics)
     assert(rPosAry.mnSrcWidth == rPosAry.mnDestWidth);
     assert(rPosAry.mnSrcHeight == rPosAry.mnDestHeight);
 
-    QImage aImage, *pImage = &aImage;
+    QImage aImage, *pImage;
+    int nSrcX, nSrcY;
     if (!pSrcGraphics || this == pSrcGraphics)
     {
         if (rPosAry.mnDestX == rPosAry.mnSrcX && rPosAry.mnDestY == rPosAry.mnSrcY)
             return;
+        pImage = static_cast<Qt5Graphics*>(this)->m_pQImage;
         aImage
             = pImage->copy(rPosAry.mnSrcX, rPosAry.mnSrcY, rPosAry.mnSrcWidth, rPosAry.mnSrcHeight);
+        pImage = &aImage;
+        nSrcX = 0;
+        nSrcY = 0;
     }
     else
+    {
         pImage = static_cast<Qt5Graphics*>(pSrcGraphics)->m_pQImage;
+        nSrcX = rPosAry.mnSrcX;
+        nSrcY = rPosAry.mnSrcY;
+    }
 
     Qt5Painter aPainter(*this);
     aPainter.drawImage(
         QPoint(rPosAry.mnDestX, rPosAry.mnDestY), *pImage,
-        QRect(rPosAry.mnSrcX, rPosAry.mnSrcY, rPosAry.mnSrcWidth, rPosAry.mnSrcHeight));
+        QRect(nSrcX, nSrcY, rPosAry.mnSrcWidth, rPosAry.mnSrcHeight));
     aPainter.update(rPosAry.mnDestX, rPosAry.mnDestY, rPosAry.mnDestWidth, rPosAry.mnDestHeight);
 }
 
@@ -399,14 +431,23 @@ void Qt5Graphics::drawBitmap(const SalTwoRect& rPosAry, const SalBitmap& rSalBit
         || rPosAry.mnDestHeight <= 0)
         return;
 
+    if (rPosAry.mnSrcWidth != rPosAry.mnDestWidth)
+        return;
+    if (rPosAry.mnSrcHeight != rPosAry.mnDestHeight)
+        return;
     assert(rPosAry.mnSrcWidth == rPosAry.mnDestWidth);
     assert(rPosAry.mnSrcHeight == rPosAry.mnDestHeight);
 
-    Qt5Painter aPainter(*this);
+    Qt5Bitmap aRGBABitmap;
+    if (rSalBitmap.GetBitCount() == 4)
+        aRGBABitmap.Create(rSalBitmap, 32);
 
-    const QImage* pImage = static_cast<const Qt5Bitmap*>(&rSalBitmap)->GetQImage();
+    const QImage* pImage = (rSalBitmap.GetBitCount() != 4)
+        ? static_cast<const Qt5Bitmap*>(&rSalBitmap)->GetQImage()
+        : aRGBABitmap.GetQImage();
     assert(pImage);
 
+    Qt5Painter aPainter(*this);
     aPainter.drawImage(
         QPoint(rPosAry.mnDestX, rPosAry.mnDestY), *pImage,
         QRect(rPosAry.mnSrcX, rPosAry.mnSrcY, rPosAry.mnSrcWidth, rPosAry.mnSrcHeight));
@@ -422,6 +463,8 @@ void Qt5Graphics::drawBitmap(const SalTwoRect& rPosAry, const SalBitmap& /*rSalB
 
     assert(rPosAry.mnSrcWidth == rPosAry.mnDestWidth);
     assert(rPosAry.mnSrcHeight == rPosAry.mnDestHeight);
+
+    assert(0 && "Qt5Graphics::drawBitmap");
 }
 
 void Qt5Graphics::drawMask(const SalTwoRect& rPosAry, const SalBitmap& /*rSalBitmap*/,
@@ -433,6 +476,8 @@ void Qt5Graphics::drawMask(const SalTwoRect& rPosAry, const SalBitmap& /*rSalBit
 
     assert(rPosAry.mnSrcWidth == rPosAry.mnDestWidth);
     assert(rPosAry.mnSrcHeight == rPosAry.mnDestHeight);
+
+    assert(0 && "Qt5Graphics::drawMask");
 }
 
 SalBitmap* Qt5Graphics::getBitmap(long nX, long nY, long nWidth, long nHeight)
@@ -442,13 +487,35 @@ SalBitmap* Qt5Graphics::getBitmap(long nX, long nY, long nWidth, long nHeight)
 
 Color Qt5Graphics::getPixel(long nX, long nY) { return m_pQImage->pixel(nX, nY); }
 
-void Qt5Graphics::invert(long /*nX*/, long /*nY*/, long /*nWidth*/, long /*nHeight*/,
-                         SalInvert /*nFlags*/)
+void Qt5Graphics::invert(long nX, long nY, long nWidth, long nHeight, SalInvert nFlags)
 {
+    Qt5Painter aPainter(*this);
+    if (SalInvert::N50 & nFlags)
+    {
+        aPainter.setCompositionMode(QPainter::RasterOp_SourceXorDestination);
+        aPainter.setBrush(Qt::DiagCrossPattern);
+        aPainter.fillRect(nX, nY, nWidth, nHeight, aPainter.brush());
+    }
+    else
+    {
+        if (SalInvert::TrackFrame & nFlags)
+        {
+            aPainter.setCompositionMode(QPainter::RasterOp_SourceXorDestination);
+            aPainter.setPen(Qt::DashLine);
+            aPainter.drawRect(nX, nY, nWidth, nHeight);
+        }
+        else
+        {
+            aPainter.setCompositionMode(QPainter::RasterOp_SourceXorDestination);
+            aPainter.fillRect(nX, nY, nWidth, nHeight, Qt::white);
+        }
+    }
+    aPainter.update(nX, nY, nWidth, nHeight);
 }
 
 void Qt5Graphics::invert(sal_uInt32 /*nPoints*/, const SalPoint* /*pPtAry*/, SalInvert /*nFlags*/)
 {
+    assert(0 && "Qt5Graphics::invert 2");
 }
 
 bool Qt5Graphics::drawEPS(long /*nX*/, long /*nY*/, long /*nWidth*/, long /*nHeight*/,
@@ -469,13 +536,19 @@ bool Qt5Graphics::blendAlphaBitmap(const SalTwoRect&, const SalBitmap& /*rSrcBit
 static bool getAlphaImage(const SalBitmap& rSourceBitmap, const SalBitmap& rAlphaBitmap,
                           QImage& rAlphaImage)
 {
-    if (rAlphaBitmap.GetBitCount() != 8 && rAlphaBitmap.GetBitCount() != 1)
+    if ((rAlphaBitmap.GetBitCount() != 8 && rAlphaBitmap.GetBitCount() != 1))
     {
         SAL_WARN("vcl.gdi", "unsupported alpha depth case: " << rAlphaBitmap.GetBitCount());
         return false;
     }
 
-    const QImage* pBitmap = static_cast<const Qt5Bitmap*>(&rSourceBitmap)->GetQImage();
+    Qt5Bitmap aRGBABitmap;
+    if (rSourceBitmap.GetBitCount() == 4)
+        aRGBABitmap.Create(rSourceBitmap, 32);
+
+    const QImage* pBitmap = (rSourceBitmap.GetBitCount() != 4)
+        ? static_cast<const Qt5Bitmap*>(&rSourceBitmap)->GetQImage()
+        : aRGBABitmap.GetQImage();
     const QImage* pAlpha = static_cast<const Qt5Bitmap*>(&rAlphaBitmap)->GetQImage();
     rAlphaImage = pBitmap->convertToFormat(Qt5_DefaultFormat32);
 
@@ -499,7 +572,7 @@ static bool getAlphaImage(const SalBitmap& rSourceBitmap, const SalBitmap& rAlph
             {
                 if (x && !(x % 8))
                     ++alpha_line;
-                if (0 == (*alpha_line & (1 << (x % 8))))
+                if (0 != (*alpha_line & (1 << (7 - x % 8))))
                     image_line[3] = 0;
             }
         }
@@ -532,7 +605,13 @@ bool Qt5Graphics::drawTransformedBitmap(const basegfx::B2DPoint& rNull, const ba
         return false;
     else
     {
-        const QImage* pBitmap = static_cast<const Qt5Bitmap*>(&rSourceBitmap)->GetQImage();
+        Qt5Bitmap aRGBABitmap;
+        if (rSourceBitmap.GetBitCount() == 4)
+            aRGBABitmap.Create(rSourceBitmap, 32);
+
+        const QImage* pBitmap = (rSourceBitmap.GetBitCount() != 4)
+            ? static_cast<const Qt5Bitmap*>(&rSourceBitmap)->GetQImage()
+            : aRGBABitmap.GetQImage();
         aImage = pBitmap->convertToFormat(Qt5_DefaultFormat32);
     }
 
@@ -556,7 +635,7 @@ bool Qt5Graphics::drawAlphaRect(long nX, long nY, long nWidth, long nHeight,
     Qt5Painter aPainter(*this, true, nTransparency);
     if (SALCOLOR_NONE != m_aFillColor)
         aPainter.fillRect(nX, nY, nWidth, nHeight, aPainter.brush());
-    else
+    if (SALCOLOR_NONE != m_aLineColor)
         aPainter.drawRect(nX, nY, nWidth, nHeight);
     aPainter.update(nX, nY, nWidth, nHeight);
     return true;
