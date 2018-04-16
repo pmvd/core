@@ -41,16 +41,17 @@ Qt5FontFace::Qt5FontFace(const Qt5FontFace& rSrc)
         m_xCharMap = rSrc.m_xCharMap;
 }
 
-Qt5FontFace* Qt5FontFace::fromQFont(const QFont& rFont)
+void Qt5FontFace::fillAttributesFromQFont(const QFont& rFont, FontAttributes& rFA)
 {
-    FontAttributes aFA;
     QFontInfo aFontInfo(rFont);
-    aFA.SetFamilyName(toOUString(aFontInfo.family()));
-    aFA.SetStyleName(toOUString(aFontInfo.styleName()));
-    aFA.SetItalic(aFontInfo.italic() ? ITALIC_NORMAL : ITALIC_NONE);
-    aFA.SetPitch(aFontInfo.fixedPitch() ? PITCH_FIXED : PITCH_VARIABLE);
 
-    FontWeight eWeight;
+    rFA.SetFamilyName(toOUString(aFontInfo.family()));
+    if (IsStarSymbol(toOUString(aFontInfo.family())))
+        rFA.SetSymbolFlag(true);
+    rFA.SetStyleName(toOUString(aFontInfo.styleName()));
+    rFA.SetPitch(aFontInfo.fixedPitch() ? PITCH_FIXED : PITCH_VARIABLE);
+
+    FontWeight eWeight = WEIGHT_DONTKNOW;
     switch( aFontInfo.weight() )
     {
     case QFont::Thin: eWeight = WEIGHT_THIN; break;
@@ -63,10 +64,23 @@ Qt5FontFace* Qt5FontFace::fromQFont(const QFont& rFont)
     case QFont::ExtraBold: eWeight = WEIGHT_ULTRABOLD; break;
     case QFont::Black: eWeight = WEIGHT_BLACK; break;
     }
-    aFA.SetWeight(eWeight);
+    rFA.SetWeight(eWeight);
 
-    SAL_INFO("vcl.qt5.font", toOUString(aFontInfo.family()) << " " << aFontInfo.weight() << " => " << (int) eWeight );
+    switch (aFontInfo.style())
+    {
+    case QFont::StyleNormal: rFA.SetItalic(ITALIC_NONE); break;
+    case QFont::StyleItalic: rFA.SetItalic(ITALIC_NORMAL); break;
+    case QFont::StyleOblique: rFA.SetItalic(ITALIC_OBLIQUE); break;
+    }
 
+    SAL_INFO("vcl.qt5.font", toOUString(aFontInfo.family()) << " "
+        << aFontInfo.weight() << " => " << (int) eWeight );
+}
+
+Qt5FontFace* Qt5FontFace::fromQFont(const QFont& rFont)
+{
+    FontAttributes aFA;
+    fillAttributesFromQFont(rFont, aFA);
     return new Qt5FontFace(aFA, rFont.toString());
 }
 

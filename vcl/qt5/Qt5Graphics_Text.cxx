@@ -58,6 +58,10 @@ void Qt5Graphics::SetFont(const FontSelectPattern* pReqFont, int nFallbackLevel)
 void Qt5Graphics::GetFontMetric(ImplFontMetricDataRef& rFMD, int nFallbackLevel)
 {
     QRawFont aRawFont(QRawFont::fromFont(*m_pTextStyle[nFallbackLevel]));
+    Qt5FontFace::fillAttributesFromQFont(*m_pTextStyle[nFallbackLevel], *rFMD);
+
+    rFMD->SetSlant(0);
+    rFMD->SetWidth(aRawFont.averageCharWidth());
 
     QByteArray aHheaTable = aRawFont.fontTable("hhea");
     std::vector<uint8_t> rHhea(aHheaTable.data(), aHheaTable.data() + aHheaTable.size());
@@ -66,9 +70,6 @@ void Qt5Graphics::GetFontMetric(ImplFontMetricDataRef& rFMD, int nFallbackLevel)
     std::vector<uint8_t> rOS2(aOs2Table.data(), aOs2Table.data() + aOs2Table.size());
 
     rFMD->ImplCalcLineSpacing(rHhea, rOS2, aRawFont.unitsPerEm());
-
-    rFMD->SetSlant( 0 );
-    rFMD->SetWidth(aRawFont.averageCharWidth());
 
     const QChar nKashidaCh = 0x0640;
     int nNumGlyphs = 1;

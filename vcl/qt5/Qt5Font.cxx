@@ -52,6 +52,21 @@ Qt5Font::Qt5Font(const PhysicalFontFace& rPFF, const FontSelectPattern& rFSP)
     setFamily( toQString(rPFF.GetFamilyName()) );
     setWeight( GetQFontWeight(rPFF.GetWeight()) );
     setPixelSize( rFSP.mnHeight );
+    switch( rFSP.GetItalic() )
+    {
+    case ITALIC_DONTKNOW:
+    case FontItalic_FORCE_EQUAL_SIZE:
+        break;
+    case ITALIC_NONE:
+        setStyle(Style::StyleNormal);
+        break;
+    case ITALIC_OBLIQUE:
+        setStyle(Style::StyleOblique);
+        break;
+    case ITALIC_NORMAL:
+        setStyle(Style::StyleItalic);
+        break;
+    }
 }
 
 Qt5Font::~Qt5Font() {}
